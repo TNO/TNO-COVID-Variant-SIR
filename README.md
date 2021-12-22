@@ -1,1 +1,1 @@
-# TNO-COVID-Variant-SIR
+# TNO-COVID-delta2omicron-SIR
