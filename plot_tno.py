@@ -2,9 +2,9 @@ import os.path as path
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import pandas as pd
+import numpy as np
 
-from modules.data.dataframe_util import *
-from modules.data.grid import Grid
 
 SAVE_PLOTS = 0
 DISPLAY_PLOTS = 1
@@ -17,13 +17,11 @@ def get_p_names(perc):
     return sname1, sname2
 
 
-class PlotTNO:
-    """
-       plotting class, static methods for plotting pandas dataframe
-    """
 
-    @staticmethod
-    def get_percentiles(df, xname, yname, percentile_window=3, percentile_values=(50, 90)):
+
+
+
+def get_percentiles(df, xname, yname, percentile_window=3, percentile_values=(50, 90)):
         """
 
         :param df: dataframe, it  assumes the data has been sorted on xname by df.sort_values(xname)
@@ -53,8 +51,8 @@ class PlotTNO:
 
 
 
-    @staticmethod
-    def plot_df(df_input: pd.DataFrame, xname: str, yname: str, catcol=None, size=None, alpha=1.0, input_figsize=(10, 10),
+
+def plot_df(df_input: pd.DataFrame, xname: str, yname: str, catcol=None, size=None, alpha=1.0, input_figsize=(10, 10),
                 ylog=False, newplot=True, show=True, input_plotsizes=(40, 400), percentile_window=-1, percentile_values=None,
                 percentile_fill=None, percentile_colors=None, percentile_alpha=0.8):
         """ plots a pandas dataframe in an x,y plot. The symbols are circles and their colors and sizes can be
@@ -63,7 +61,7 @@ class PlotTNO:
         :param df_input: dataframe
         :param xname: x coordinate field
         :param yname: y coordinate field
-        :param catcol: field to denote colors, this can be a non-number field, such that it generates categories (well names etc)
+        :param catcol: field to denote colors, this can be a non-number field, such that it generates categories
         :param size: field to denote size
         :param alpha:  opacity (0 is fully transparant, 1 is fully opaque)
         :param input_figsize:  size in cm of plot x-axis  and y-axis (float)
@@ -84,7 +82,7 @@ class PlotTNO:
 
         df = df_input.copy()
         df = df.sort_values(xname)
-        PlotTNO.get_percentiles(df, xname, yname, percentile_window, percentile_values)
+        get_percentiles(df, xname, yname, percentile_window, percentile_values)
 
 
         # x = np.asarray(df[xname])
@@ -119,7 +117,7 @@ class PlotTNO:
         plotsizes_scale = plotsize_max / np.log10(np.size(x))
         plotsizes_scalemin = input_plotsizes[0] / input_plotsizes[1]
         plotsizes_scalemax = (input_plotsizes[1] - input_plotsizes[0]) / input_plotsizes[1]
-        if size != 'None':
+        if size is not None:
             sizes = np.asarray(df[size])
             sizes2 = (sizes - min(sizes)) / (max(sizes) - min(sizes))
             df['plotsizes'] = plotsizes_scale * (plotsizes_scalemin + plotsizes_scalemax * sizes2)
@@ -159,8 +157,7 @@ class PlotTNO:
                     sname1, sname2 = get_p_names(perc)
                     plt.plot(x, df[sname1], color=percentile_colors[i], linewidth=1)
                     plt.plot(x, df[sname2], color=percentile_colors[i], linewidth=1)
-            if percentile_swansonmean:
-                plt.plot(x, df['swansonmean'], color='blue', linewidth=1)
+
 
         if categories:
             legend1 = plt.legend(loc="lower right", title=catcol)
@@ -182,4 +179,3 @@ class PlotTNO:
             plt.show()
         else:
             return plt
-
