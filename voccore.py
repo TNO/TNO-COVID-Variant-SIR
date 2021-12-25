@@ -140,7 +140,7 @@ def get_expectedk_segregated (pu, pv, pb, S, ve_trans, ve_vac_d, ve_booster_d, v
     Ct_d =  1
 
     Id = 1
-    Io = (pu + (pv + Ud) * (1 - ve_vac_o)*(1-ve_trans)  + pb * (1 - ve_booster_o)*(1-ve_trans) ) / (
+    Io = (pu +Ud *(1 - ve_immune_o)*(1-ve_trans) +pv * (1 - ve_vac_o)*(1-ve_trans)  + pb * (1 - ve_booster_o)*(1-ve_trans) ) / (
                 pu + pv * (1 - ve_vac_d)*(1-ve_trans)  + pb * (1 - ve_booster_d)*(1-ve_trans) )
 
     Rtd = Ct_d * Id
@@ -163,7 +163,7 @@ def get_expectedk_mixed (pu, pv, pb, S, ve_trans, ve_vac_d, ve_booster_d, ve_vac
     Ct_d =  (pu + (pv + pb) * (1 - ve_trans)) / Cv
 
     Id = 1
-    Io = (pu + (pv + Ud) * (1 - ve_vac_o) + pb * (1 - ve_booster_o)) / (
+    Io = (pu + Ud*(1 - ve_immune_o) +  pv  * (1 - ve_vac_o) + pb * (1 - ve_booster_o)) / (
                 pu + pv * (1 - ve_vac_d) + pb * (1 - ve_booster_d))
 
     Rtd = Ct_d * Id
@@ -325,7 +325,7 @@ def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
     Ct_d = ft * 0 + (pu + (pv + pb) * (1 - ve_trans)) / Cv
 
     Id = ft * 0 + (pu + pv * (1 - ve_vac_d) + pb * (1 - ve_booster_d)) / (pu[0] + p_vac_start * (1 - ve_vac_d) + p_booster_start * (1 - ve_booster_d))
-    Io = ft * 0 + (pu + (pv +Ud)* (1 - ve_vac_o) + pb * (1 - ve_booster_o)) / (pu[0] + (p_vac_start) * (1 - ve_vac_d) + p_booster_start * (1 - ve_booster_d))
+    Io = ft * 0 + (pu + Ud *(1-ve_immune_o) + pv* (1 - ve_vac_o) + pb * (1 - ve_booster_o)) / (pu[0] + (p_vac_start) * (1 - ve_vac_d) + p_booster_start * (1 - ve_booster_d))
 
 
     Rtd = Ct_d * Id
@@ -366,7 +366,7 @@ def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
     infected = startinfperc*1e-2
     #infected = 10e3 * ts / 17e6
 
-    # should be 1 to get recovered back otherwise underestimate
+    # should be corrected to get recovered back otherwise underestimate
     startsusceptible += Ud*startsusceptible
     sirinit = [startsusceptible - infected, infected, 0.0]
 
