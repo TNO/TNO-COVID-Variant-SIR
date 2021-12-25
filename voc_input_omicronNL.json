@@ -24,7 +24,7 @@
   "startsusceptible":  ["Uniform",0.6,0.7],
     "ts": 4.8,
   "ve_trans": 0.4,
-  "ve_immune_o": 0.4,
+  "ve_immune_o": 0.2,
   "ve_immune_hosp_o": ["Uniform",0.4,0.7],
   "ve_vac_d": 0.6,
   "ve_vac_o": 0.1,
