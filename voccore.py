@@ -25,7 +25,9 @@ def sample_parameter_space(config):
 
     sample_space = dict()
     variable_param_names = ['r_lockdownscale', 'k_voc', 'f0_voc','vac_ratio',
-                           'startinfperc','startsusceptible', 'ts','ve_trans', 've_vac_d', 've_vac_o',
+                           'startinfperc','startsusceptible', 'ts','ve_trans',
+                            've_immune_o', 've_immune_hosp_o',
+                            've_vac_d', 've_vac_o',
                             've_booster_d', 've_booster_o',
                             've_vac_hosp_d', 've_vac_hosp_o',
                             've_booster_hosp_d', 've_booster_hosp_o',
@@ -91,6 +93,8 @@ def run_models(config):
                                  p['agegroups_p_vac'][a], p['w_hosp_age'][a],
                                  p['startinfperc'][a], p['startsusceptible'][a], p['ts'][a],
                                  ve_trans=p['ve_trans'][a],
+                                 ve_immune_o=p['ve_immune_o'][a],
+                                 ve_immune_hosp_o=p['ve_immune_hosp_o'][a],
                                  ve_vac_d=p['ve_vac_d'][a],
                                  ve_vac_o=p['ve_vac_o'][a],
                                  ve_booster_d=p['ve_booster_d'][a],
@@ -112,6 +116,8 @@ def run_models(config):
                               p['agegroups_p_vac'][a], p['w_hosp_age'][a],
                               p['startinfperc'][a], p['startsusceptible'][a], p['ts'][a],
                               ve_trans=p['ve_trans'][a],
+                              ve_immune_o=p['ve_immune_o'][a],
+                              ve_immune_hosp_o=p['ve_immune_hosp_o'][a],
                               ve_vac_d=p['ve_vac_d'][a],
                               ve_vac_o=p['ve_vac_o'][a],
                               ve_booster_d=p['ve_booster_d'][a],
@@ -127,6 +133,100 @@ def run_models(config):
     return p, results
 
 
+def get_expectedk_segregated (pu, pv, pb, S, ve_trans, ve_vac_d, ve_booster_d, ve_vac_o, ve_booster_o, ve_immune_o, R0o_R0d, ts):
+    Ud = (1-S)*(1-ve_immune_o)/S
+
+    Ct_o =  1
+    Ct_d =  1
+
+    Id = 1
+    Io = (pu + (pv + Ud) * (1 - ve_vac_o)*(1-ve_trans)  + pb * (1 - ve_booster_o)*(1-ve_trans) ) / (
+                pu + pv * (1 - ve_vac_d)*(1-ve_trans)  + pb * (1 - ve_booster_d)*(1-ve_trans) )
+
+    Rtd = Ct_d * Id
+
+    gamma = 1 / ts
+    #beta = np.exp(k) - 1 + gamma
+    #rtratioref = beta / gamma
+    # R0o_R0d = rtratioref * Ct_d * Id / (Ct_o * Io)
+    rtratioref  = R0o_R0d * (Ct_o * Io)/ (Ct_d * Id)
+    beta =   rtratioref * gamma
+    expk = beta +1 - gamma
+    k = np.log(expk)
+
+    return k
+
+def get_expectedk_mixed (pu, pv, pb, S, ve_trans, ve_vac_d, ve_booster_d, ve_vac_o, ve_booster_o, ve_immune_o, R0o_R0d, ts):
+    Ud = (1-S)*(1-ve_immune_o)/S
+    Cv =  (pu + (pv + pb) * (1 - ve_trans))
+    Ct_o =  ((pu + (pv + pb + Ud) * (1 - ve_trans)) / (pu + (pv + pb + Ud))) / Cv
+    Ct_d =  (pu + (pv + pb) * (1 - ve_trans)) / Cv
+
+    Id = 1
+    Io = (pu + (pv + Ud) * (1 - ve_vac_o) + pb * (1 - ve_booster_o)) / (
+                pu + pv * (1 - ve_vac_d) + pb * (1 - ve_booster_d))
+
+    Rtd = Ct_d * Id
+
+    gamma = 1 / ts
+    #beta = np.exp(k) - 1 + gamma
+    #rtratioref = beta / gamma
+    # R0o_R0d = rtratioref * Ct_d * Id / (Ct_o * Io)
+    rtratioref  = R0o_R0d * (Ct_o * Io)/ (Ct_d * Id)
+    beta =   rtratioref * gamma
+    expk = beta +1 - gamma
+    k = np.log(expk)
+    return k
+
+
+def getHosp(inf, ft, demage, demn, agegroups_p_vac, w_hosp_age, p_booster_start, p_vac_start, dp_b,
+            Ud, ve_immune_hosp_o, ve_vac_hosp_d, ve_vac_hosp_o, ve_booster_hosp_d, ve_booster_hosp_o):
+    # in each agegroups assess the expected vaccination levels
+    demtotal = demn[-1]
+    agegroupsn = np.diff(demn)
+
+    #establish which fractions inside the different age groups are vaccinated or boostered
+    agegroups = demage[0:-1]
+    # target vaccination rate in age groups (use this as maximum to fill with available vaccins and boosters,
+    # start from oldest group
+    agegroupspvac = agegroups_p_vac
+    # the weight of the agegroup
+    w = agegroupsn / demtotal
+    #  the weight fraction vaccins relative to total population
+    wpvac = w * agegroupspvac
+    agegroup_booster = np.empty([np.size(agegroups), np.size(inf)])
+    agegroup_vac = np.empty([np.size(agegroups), np.size(inf)])
+
+    # fill the vaccins and boosters in the different age groups
+    for j, index in enumerate(inf):
+        p_booster = p_booster_start + dp_b[j]
+        p_vac =  p_vac_start - dp_b[j]
+        for i, agemax in enumerate(agegroupsn):
+            agegroup_booster[i][j] = min(wpvac[i], p_booster)
+            p_booster -= agegroup_booster[i][j]
+            agegroup_vac[i][j] = min((wpvac[i]-agegroup_booster[i][j]), p_vac)
+            p_vac -= agegroup_vac[i][j]
+
+
+    # Now determine the hospitalization pressure from infected
+    # first establish the reference weights of each age group on the hospitalization, which equals w*CHRd0
+    w_hosp = w_hosp_age/np.sum(w_hosp_age)
+
+    hosp = inf*0
+    for i, agemax in enumerate(agegroupsn):
+        pv_iage = agegroup_vac[i]/w[i]
+        pb_iage = agegroup_booster[i]/w[i]
+        pu_iage = 1 - pv_iage -pb_iage
+
+        hdelta = (pu_iage + pv_iage * (1 - ve_vac_hosp_d) + pb_iage * (1 - ve_booster_hosp_d))
+        homicron =  ((1-ve_immune_hosp_o) *pu_iage + (pv_iage +Ud) * (1 - ve_vac_hosp_o) + pb_iage * (1 - ve_booster_hosp_o))/ (pu_iage + pv_iage + pb_iage + Ud)
+
+        hosp_agegroup = (1-ft) *hdelta + ft * homicron
+        hosp += hosp_agegroup *w_hosp[i]
+
+    hosp *= inf
+    hosp = hosp/hosp[0]
+    return hosp
 
 def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
                k_voc,  f0_voc, vac_ratio, startdate, enddate, boosterdayx, boosterdayn,
@@ -134,6 +234,7 @@ def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
                agegroups_p_vac, w_hosp_age,
                startinfperc, startsusceptible,  ts,
                ve_trans = 0.5,
+               ve_immune_o = 0.2, ve_immune_hosp_o = 0.5,
                ve_vac_d = 0.6, ve_vac_o=0.2,
                ve_booster_d=0.95, ve_booster_o=0.75,
                ve_vac_hosp_d= 0.95, ve_vac_hosp_o=0.48,
@@ -212,9 +313,35 @@ def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
     Vo = (1-ve_vac_o)*(1-ve_trans)
     Bo = (1-ve_booster_o)*(1-ve_trans)
 
-    Ud = (1-startsusceptible) / startsusceptible
+    Ud = (1-startsusceptible)*(1-ve_immune_o) / startsusceptible
 
-    rtratio_voc, R0o_R0d = get_rtratio_voc(pu, pv, pb, Ud, Vo, Bo, Vd, Bd, p_vac_start, p_booster_start, k, ts)
+
+    Ct_o = 1
+    Ct_d = 1
+
+    # eq 2 correction factors
+    Cv =  (pu[0] + (p_vac_start + p_booster_start) * (1 - ve_trans))
+    Ct_o = ft * 0 + ((pu + (pv + pb + Ud) * (1 - ve_trans)) / (pu + (pv + pb + Ud))) / Cv
+    Ct_d = ft * 0 + (pu + (pv + pb) * (1 - ve_trans)) / Cv
+
+    Id = ft * 0 + (pu + pv * (1 - ve_vac_d) + pb * (1 - ve_booster_d)) / (pu[0] + p_vac_start * (1 - ve_vac_d) + p_booster_start * (1 - ve_booster_d))
+    Io = ft * 0 + (pu + (pv +Ud)* (1 - ve_vac_o) + pb * (1 - ve_booster_o)) / (pu[0] + (p_vac_start) * (1 - ve_vac_d) + p_booster_start * (1 - ve_booster_d))
+
+
+    Rtd = Ct_d * Id
+
+    gamma = 1 / ts
+    beta = np.exp(k) - 1 + gamma
+    rtratioref = beta / gamma
+    R0o_R0d = rtratioref * Ct_d[0]*Id[0]/(Ct_o[0]*Io[0])
+
+
+    Rto=   R0o_R0d* Ct_o * Io
+
+
+    rtratio_voc = Rto/Rtd
+
+    #rtratio_voc, R0o_R0d = get_rtratio_voc(pu, pv, pb, Ud, Vo, Bo, Vd, Bd, p_vac_start, p_booster_start, k, ts)
 
 
 
@@ -222,13 +349,9 @@ def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
     Rt = np.empty([indx.size])
 
-    # rtio_vos
-    Ct_Rtvoc =  ft*0  + ((pu + (pv +pb + Ud)* (1-ve_trans))/ (pu + (pv +pb + Ud))) /(pu[0]+(p_vac_start+p_booster_start)*(1-ve_trans))
-    Ct_Rtd = ft * 0 + (pu + (pv + pb ) * (1 - ve_trans)) / ( pu[0] + (p_vac_start + p_booster_start) * (1 - ve_trans))
-    Rtd = ft*0 + (pu + pv * (1-ve_vac_d) + pb * (1-ve_booster_d))/ (pu[0] + p_vac_start * (1-ve_vac_d) + p_booster_start * (1- ve_booster_d))
-    rtratio_voc /= Ct_Rtvoc[0]
 
-    Rt = (1 - ft) *  Ct_Rtd * Rtd+ ft * rtratio_voc * Ct_Rtvoc* Rtd
+
+    Rt = (1 - ft) *  Rtd+ ft * Rto
 
 
 
@@ -243,13 +366,16 @@ def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
     infected = startinfperc*1e-2
     #infected = 10e3 * ts / 17e6
 
-    startsusceptible =1
+    # should be 1 to get recovered back otherwise underestimate
+    startsusceptible += Ud*startsusceptible
     sirinit = [startsusceptible - infected, infected, 0.0]
 
 
 
     #inf = getInfectedFromSir(sirinit, Rt, ts)
+    #inf = getInfectedFromSeir(sirinit, Rt,ts)
     inf = base_sir_model(sirinit, Rt,ts)
+
 
     #inf = getInfectedFromSeir(sirinit, Rt, ts)
 
@@ -259,58 +385,24 @@ def single_run_method1 (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
     infpeak = getpeaks(inf)
 
-
-    # obtain the the hospitalized fraction as a function of different vacinne status and
-
-    #establish which fractions inside the different age groups are vaccinated or boostered
-    agegroups = demage[0:-1]
-    agegroupsn = np.diff(demn)
-    agegroupspvac = agegroups_p_vac
-    w = agegroupsn / demtotal
-    wpvac = w * agegroupspvac
-    agegroup_booster = np.empty([np.size(agegroups), np.size(indx)])
-    agegroup_vac = np.empty([np.size(agegroups), np.size(indx)])
-
-    for j, index in enumerate(indx):
-        p_booster = p_booster_start + dp_b[j]
-        p_vac =  p_vac_start - dp_b[j]
-        for i, agemax in enumerate(agegroupsn):
-            agegroup_booster[i][j] = min(wpvac[i], p_booster)
-            p_booster -= agegroup_booster[i][j]
-            agegroup_vac[i][j] = min((wpvac[i]-agegroup_booster[i][j]), p_vac)
-            p_vac -= agegroup_vac[i][j]
+    hosp = getHosp(inf, ft, demage, demn, agegroups_p_vac, w_hosp_age, p_booster_start, p_vac_start, dp_b,
+            Ud, ve_immune_hosp_o,ve_vac_hosp_d, ve_vac_hosp_o, ve_booster_hosp_d, ve_booster_hosp_o)
 
 
-    # determine the hospitalization pressure from infected. apply relative weight based on the VEhospitalisation
-    # hosp =  ( (1-ft) hdelta + ft homicron ) inf
-    # hosp = hosp/hosp[0]
 
-    w_hosp = w_hosp_age/np.sum(w_hosp_age)
-
-    hosp = inf*0
-    for i, agemax in enumerate(agegroupsn):
-        puad = w[i] - (agegroup_vac[i] + agegroup_booster[i] )
-        puao = puad * startsusceptible
-        hdelta = (puad + agegroup_vac[i] * (1 - ve_vac_hosp_d) + agegroup_booster[i] * (1 - ve_booster_hosp_d))
-        homicron = (puao + (puao-puad +agegroup_vac[i]) * (1 - ve_vac_hosp_o) + agegroup_booster[i] * (1 - ve_booster_hosp_o))
-
-        hosp_agegroup = (1-ft) *hdelta + ft * homicron
-        hosp += hosp_agegroup *w_hosp[i]
-
-    hosp *= inf
-    hosp = hosp/hosp[0]
 
     hosppeak = getpeaks(hosp)
 
     return indx,inf,  ft, Rt, r_lockdown, rtratio_voc, pu, pv, pb,  infpeak, hosp, hosppeak
 
 
-def single_run2(r_lockdowndayx, r_lockdownval, r_lockdownscale,
+def single_run_method2(r_lockdowndayx, r_lockdownval, r_lockdownscale,
                k_voc,  f0_voc, vac_ratio, startdate, enddate, boosterdayx, boosterdayn,
                p_vac_start,  p_booster_start,  demage, demn,
                agegroups_p_vac, w_hosp_age,
                startinfperc, startsusceptible,  ts,
                ve_trans = 0.5,
+               ve_immune_o=0.2, ve_immune_hosp_o=0.5,
                ve_vac_d = 0.6, ve_vac_o=0.2,
                ve_booster_d=0.95, ve_booster_o=0.75,
                ve_vac_hosp_d= 0.95, ve_vac_hosp_o=0.48,
@@ -389,23 +481,38 @@ def single_run2(r_lockdowndayx, r_lockdownval, r_lockdownscale,
     Vo = (1-ve_vac_o)*(1-ve_trans)
     Bo = (1-ve_booster_o)*(1-ve_trans)
 
-    Ud = (1-startsusceptible) / startsusceptible
+    Ud = (1-startsusceptible)*(1-ve_immune_o) / startsusceptible
 
+
+    #rtratio_voc, R0o_R0d = get_rtratio_voc(pu, pv, pb, Ud, Vo, Bo, Vd, Bd, p_vac_start, p_booster_start, k, ts)
+
+
+    # eq 2 correction factors
+    Cv =  (pu[0] + (p_vac_start + p_booster_start) * (1 - ve_trans))
+    Ct_o = ft * 0 + ((pu + (pv + pb + Ud) * (1 - ve_trans)) / (pu + (pv + pb + Ud))) / Cv
+    Ct_d = ft * 0 + (pu + (pv + pb) * (1 - ve_trans)) / Cv
+
+    Id = ft * 0 + (pu + pv * (1 - ve_vac_d) + pb * (1 - ve_booster_d)) / (pu[0] + p_vac_start * (1 - ve_vac_d) + p_booster_start * (1 - ve_booster_d))
+    Io = ft * 0 + (pu + (pv +Ud)* (1 - ve_vac_o) + pb * (1 - ve_booster_o)) / (pu[0] + (p_vac_start) * (1 - ve_vac_o) + p_booster_start * (1 - ve_booster_o))
+
+
+    Rtd = Ct_d * Id
+
+    gamma = 1 / ts
+    beta = np.exp(k) - 1 + gamma
+    rtratioref = beta / gamma
+    R0o_R0d = rtratioref * Ct_d[0]*Id[0]/(Ct_o[0]*Io[0])
+    #R0o_R0d = rtratioref * Ct_d[0]  / Ct_o[0]
+
+    Rto=   R0o_R0d* Ct_o * Io
+    rtratio_voc = Rto/Rtd
 
     rtratio_voc, R0o_R0d = get_rtratio_voc(pu, pv, pb, Ud, Vo, Bo, Vd, Bd, p_vac_start, p_booster_start, k, ts)
 
 
-
-
-    Rtd = ft * 0 + 1
-
-    Ct_Rtvoc =  ft*0  + ((pu + (pv +pb + Ud)* (1-ve_trans))/ (pu + (pv +pb + Ud))) /(pu[0]+(p_vac_start+p_booster_start)*(1-ve_trans))
-    Ct_Rtd = ft * 0 + (pu + (pv + pb ) * (1 - ve_trans)) / ( pu[0] + (p_vac_start + p_booster_start) * (1 - ve_trans))
-
-
     # apply effects of increase due to higher basic reproduction number
-
-    Rtd = getInterFt(ft, Rtd*Ct_Rtd, Rtd* R0o_R0d * Ct_Rtvoc)
+    Rtd = ft * 0 + 1
+    Rtd = getInterFt(ft, Ct_d,  R0o_R0d *Ct_o)
 
     # now correct properly for R(0) and measures for additional lockdown
     r_lockdown = np.interp(indx, r_lockdowndayx, r_lockdownval)
@@ -418,12 +525,13 @@ def single_run2(r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
 
 
-    inf, pu,pv,pb = base_sirvb_model(sirinit, Rtd,   ts, ft, pu, pv, pb, ve_vac_d, ve_vac_o, ve_booster_d,   ve_booster_o,
+    inf, pu,pv,pb = base_sirvb_model(sirinit, ve_immune_o, Rtd,   ts, ft, pu, pv, pb, ve_vac_d, ve_vac_o, ve_booster_d,   ve_booster_o,
                                      ve_trans)
 
 
 
-
+    hosp = getHosp(inf, ft, demage, demn, agegroups_p_vac, w_hosp_age, p_booster_start, p_vac_start, dp_b,
+            Ud, ve_immune_hosp_o, ve_vac_hosp_d, ve_vac_hosp_o, ve_booster_hosp_d, ve_booster_hosp_o)
 
     inf = inf / inf[0]
     infpeak = getpeaks(inf)
@@ -433,45 +541,8 @@ def single_run2(r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
     # obtain the the hospitalized fraction as a function of different vacinne status and
 
-    #establish which fractions inside the different age groups are vaccinated or boostered
-    agegroups = demage[0:-1]
-    agegroupsn = np.diff(demn)
-    agegroupspvac = agegroups_p_vac
-    w = agegroupsn / demtotal
-    wpvac = w * agegroupspvac
-    agegroup_booster = np.empty([np.size(agegroups), np.size(indx)])
-    agegroup_vac = np.empty([np.size(agegroups), np.size(indx)])
-
-    # in each agegroups assess the expected vaccination levels
-    for j, index in enumerate(indx):
-        p_booster = p_booster_start + dp_b[j]
-        p_vac =  p_vac_start - dp_b[j]
-        for i, agemax in enumerate(agegroupsn):
-            agegroup_booster[i][j] = min(wpvac[i], p_booster)
-            p_booster -= agegroup_booster[i][j]
-            agegroup_vac[i][j] = min((wpvac[i]-agegroup_booster[i][j]), p_vac)
-            p_vac -= agegroup_vac[i][j]
 
 
-    # determine the hospitalization pressure from infected. apply relative weight based on the VEhospitalisation
-    # hosp =  ( (1-ft) hdelta + ft homicron ) inf
-    # hosp = hosp/hosp[0]
-
-    w_hosp = w_hosp_age/np.sum(w_hosp_age)
-
-    hosp = inf*0
-    for i, agemax in enumerate(agegroupsn):
-        puad = w[i] - (agegroup_vac[i] + agegroup_booster[i] )
-        # expected change for susceptible change from the addition of the removed fraction to susceptible
-        puao = puad * startsusceptible
-        hdelta = (puad + agegroup_vac[i] * (1 - ve_vac_hosp_d) + agegroup_booster[i] * (1 - ve_booster_hosp_d))
-        homicron = (puao + (puao-puad +agegroup_vac[i]) * (1 - ve_vac_hosp_o) + agegroup_booster[i] * (1 - ve_booster_hosp_o))
-
-        hosp_agegroup = (1-ft) *hdelta + ft * homicron
-        hosp += hosp_agegroup *w_hosp[i]
-
-    hosp *= inf
-    hosp = hosp/hosp[0]
 
     hosppeak = getpeaks(hosp)
 
@@ -491,7 +562,7 @@ def getInterFt (ft, d, o):
 
 
 
-def base_sirvb_model(seir_init, Rtref,  ts, ft, pu, pv, pb, vinf_d, vinf_o, binf_d, binf_o, ve_trans):
+def base_sirvb_model(seir_init, ve_immune_o, Rtref,  ts, ft, pu, pv, pb, vinf_d, vinf_o, binf_d, binf_o, ve_trans):
     gamma = 1/ts
     s = s0 = seir_init[0]*pu[0]
     i = seir_init[1]
@@ -534,9 +605,9 @@ def base_sirvb_model(seir_init, Rtref,  ts, ft, pu, pv, pb, vinf_d, vinf_o, binf
         bb = beta_t.get_beta(t)  # * ((s + (v +b)*(1-ve_trans))*(s0+v0+b0))/((s0+ (v0+b0)*(1-ve_trans))*(s+b+v))
         dsdt = -bb * s * i
         didt = bb *  i * (s + v * eta_v_t.get_beta(t)  + b  * eta_b_t.get_beta(t)) - gamma * i
-        dvdt = dvdt_t.get_beta(t)*(1-r) + dfdt_t.get_beta(t)* (seir_init[2]) - bb *  i * v * eta_v_t.get_beta(t)
+        dvdt = dvdt_t.get_beta(t)*(1-r) + dfdt_t.get_beta(t)* (seir_init[2]*(1-ve_immune_o)) - bb *  i * v * eta_v_t.get_beta(t)
         dbdt = dbdt_t.get_beta(t)*(1-r)  - bb *  i * b * eta_b_t.get_beta(t)
-        drdt = gamma * i - dfdt_t.get_beta(t)* (seir_init[2])
+        drdt = gamma * i - dfdt_t.get_beta(t)* (seir_init[2]*(1-ve_immune_o))
 
 
         dydt = [dsdt,  # dS/dt      Susceptible
@@ -585,6 +656,8 @@ def get_rtratio_voc(pu, pv, pb, Ud, Vo, Bo, Vd, Bd, p_vac_start, p_booster_start
 
     rtratio_voc *= R0o_R0d
 
+    #print (" R0o_R0d ",R0o_R0d[0] )
+
     return rtratio_voc, R0o_R0d
 
 
@@ -592,197 +665,6 @@ def get_rtratio_voc(pu, pv, pb, Ud, Vo, Bo, Vd, Bd, p_vac_start, p_booster_start
 
 
 
-def single_run_OLD(r_lockdowndayx, r_lockdownval, r_lockdownscale,
-               k_voc,  f0_voc, vac_ratio, startdate, enddate, boosterdayx, boosterdayn,
-               p_vac_start,  p_booster_start,  demage, demn,
-               agegroups_p_vac, w_hosp_age,
-               startinfperc, startsusceptible,  ts,
-               ve_trans = 0.5,
-               ve_vac_d = 0.6, ve_vac_o=0.2,
-               ve_booster_d=0.95, ve_booster_o=0.75,
-               ve_vac_hosp_d= 0.95, ve_vac_hosp_o=0.48,
-               ve_booster_hosp_d=0.975, ve_booster_hosp_o=0.9,
-               re0_voc=-1):
-    """
-         construct Grid instance from fname and format
-
-     :param  r_lockdowndayx: days after start specifying r_lockdown (for delta)
-     :param  r_lockdownval: the R(0) value at r_lockdowndayx  (for delta)
-     :param  k_voc : the daily growth rate (natural logarithm of the VOC (omicron))
-
-     :param  vac_ratio: the  booster speed as fraction of boosterdayx, boosterdayn
-     :param  boosterdayx: array with days from start
-     :param  boosterdayn: number of boosters planned at boosterdayx
-     :param  p_vac_start:  fraction of population vaccinated at start of simulation
-     :param  p_booster_start:  fraction of population boostered at start of simulation
-
-     :param  demage :  array with age cohort limits in the demography (descending, starting from ca 90 to 0)
-     :param  demn : number of people in the age cohort
-     :param  startinfperc: starting infection fraction of population (daily infected * ts)
-     :param  startsusceptable: starting susceptable fraction of population (taking into account passed infections)
-     :param  ts : serial interval time
-     :param  Ud:  immune fraction in population related to
-     :param  ve_trans  vaccin and booster efficy against transmission
-     :param  ve_vac_d:  Vaccin efficacy against infections for delta
-     :param  ve_vac_o   Vaccin efficacy against infections for omicron
-     :param  ve_booster_d:  booster efficacy against infections for delta
-     :param  ve_booster_o   booster efficacy against infections for omicron
-     :param  re0_voc:  the ration of the basi reproduction number of the VOC omicron  to prevailing (delta), if omitted it will estimate it from the vaccination state and k value
-
-     """
-
-    date1 = startdate
-    date2 = enddate
-    datesx = list(rrule.rrule(rrule.DAILY, dtstart=parser.parse(date1), until=parser.parse(date2)))
-
-    x = np.array(datesx)
-    indx = np.arange(x.size)
-
-    ft = np.empty([indx.size])
-
-
-    k = k_voc
-
-
-
-
-
-
-
-    p = 10**f0_voc
-
-    ft = p * np.exp(k* indx) / (p * np.exp(k * indx) + (1 - p))
-
-
-    demtotal = demn[-1]
-
-    # number of boosters
-    dembooster = np.interp(indx, boosterdayx, boosterdayn)
-    dembooster *=vac_ratio
-
-    # you cannot booster more than vaccinated
-    dembooster = np.minimum(dembooster, demtotal*(p_vac_start))
-
-    dp_b = dembooster/demtotal
-
-    # unvaccinated kept fixed
-    pu = ft*0 + (1.0 -  p_vac_start - p_booster_start)
-    # create time series of pv and pb
-    pv = ft * 0 + p_vac_start - dp_b
-    pb = ft * 0 + p_booster_start + dp_b
-
-    Vd = (1-ve_vac_d)*(1-ve_trans)
-    Bd = (1-ve_booster_d)*(1-ve_trans)
-    Vo = (1-ve_vac_o)*(1-ve_trans)
-    Bo = (1-ve_booster_o)*(1-ve_trans)
-
-    Ud = (1-startsusceptible) / startsusceptible
-
-
-
-
-
-
-    rtratio_voc = (pu + (Ud + pv) * Vo + pb * Bo)/ (pu + pv * Vd + pb * Bd)
-
-
-    gamma = 1 / ts
-    beta = np.exp(k) - 1 + gamma
-    rtratioref = beta / gamma
-
-
-
-
-    rtratiovacstate = (pu + (Ud + p_vac_start) * Vo + p_booster_start * Bo)/ (pu + p_vac_start * Vd + p_booster_start * Bd)
-
-    R0o_R0d = rtratioref/rtratiovacstate
-
-    rtratio_voc *= R0o_R0d
-
-
-# delta related change in R
-
-    Rtd = ft *0 + (1 +  (-dp_b *Vd + dp_b * Bd) / (pu + p_vac_start * Vd + p_booster_start * Bd))
-
-
-
-
-
-    Rt = np.empty([indx.size])
-    Rt = (1 - ft) * Rtd+ ft * rtratio_voc * Rtd
-
-    # now correct properly for R(0) and measures for additional lockdown
-    r_lockdown = np.interp(indx, r_lockdowndayx, r_lockdownval)
-    Rt *= r_lockdown/Rt[0]
-
-
-
-    inf = np.empty([indx.size])
-    infected = startinfperc*1e-2
-    #infected = 10e3 * ts / 17e6
-
-    sirinit = [startsusceptible - infected, infected, 0.0]
-
-
-
-
-
-
-    #inf = getInfectedFromSir(sirinit, Rt, ts)
-    inf = base_sir_model(sirinit, Rt,ts)
-
-    #inf = getInfectedFromSeir(sirinit, Rt, ts)
-
-    inf = inf / inf[0]
-
-
-
-    infpeak = getpeaks(inf)
-
-
-    # obtain the the hospitalized fraction as a function of different vacinne status and
-
-    #establish which fractions inside the different age groups are vaccinated or boostered
-    agegroups = demage[0:-1]
-    agegroupsn = np.diff(demn)
-    agegroupspvac = agegroups_p_vac
-    w = agegroupsn / demtotal
-    wpvac = w * agegroupspvac
-    agegroup_booster = np.empty([np.size(agegroups), np.size(indx)])
-    agegroup_vac = np.empty([np.size(agegroups), np.size(indx)])
-
-    for j, index in enumerate(indx):
-        p_booster = p_booster_start + dp_b[j]
-        p_vac =  p_vac_start - dp_b[j]
-        for i, agemax in enumerate(agegroupsn):
-            agegroup_booster[i][j] = min(wpvac[i], p_booster)
-            p_booster -= agegroup_booster[i][j]
-            agegroup_vac[i][j] = min((wpvac[i]-agegroup_booster[i][j]), p_vac)
-            p_vac -= agegroup_vac[i][j]
-
-
-    # determine the hospitalization pressure from infected. apply relative weight based on the VEhospitalisation
-    # hosp =  ( (1-ft) hdelta + ft homicron ) inf
-    # hosp = hosp/hosp[0]
-
-    w_hosp = w_hosp_age/np.sum(w_hosp_age)
-
-    hosp = inf*0
-    for i, agemax in enumerate(agegroupsn):
-        puad = w[i] - (agegroup_vac[i] + agegroup_booster[i] )
-        puao = puad * startsusceptible
-        hdelta = (puad + agegroup_vac[i] * (1 - ve_vac_hosp_d) + agegroup_booster[i] * (1 - ve_booster_hosp_d))
-        homicron = (puao + (puao-puad +agegroup_vac[i]) * (1 - ve_vac_hosp_o) + agegroup_booster[i] * (1 - ve_booster_hosp_o))
-
-        hosp_agegroup = (1-ft) *hdelta + ft * homicron
-        hosp += hosp_agegroup *w_hosp[i]
-
-    hosp *= inf
-    hosp = hosp/hosp[0]
-
-    hosppeak = getpeaks(hosp)
-
-    return indx,inf,  ft, Rt, Rtd, rtratio_voc, pu, pv, pb,  infpeak, hosp, hosppeak
 
 
 def getpeaks(inf):
@@ -852,13 +734,13 @@ def base_sir_model(seir_init, Rt, ts):
     return inf
 
 def getInfectedFromSeir(seir_init, Rt,  ts):
-    gamma = 1.0/ts
-    sigma = 1.0/2.5
+    gamma = 1.0/2.5
+    sigma = 1/6.5
     s = seir_init[0]
     e = seir_init[1]
     i = seir_init[1]
     r = 0.0
-    beta = Rt*gamma/s
+    beta = Rt * (gamma/sigma)/ s
     inf = np.empty([Rt.size])
 
     for itime in range(100):
@@ -892,28 +774,6 @@ def getInfectedFromSeir(seir_init, Rt,  ts):
         r += drdt
     return inf
 
-def getInfectedFromSir(seir_init, Rt,   ts):
-    gamma = 1/ts
-    s = seir_init[0]
-    i = seir_init[1]
-    r = seir_init[2]
-    beta = Rt*gamma/seir_init[0]
-    inf = np.empty([Rt.size])
-    inf[0] = i
-    for itime, rt in enumerate(Rt):
-        # daily infected
-        inf[itime] = gamma*i
-        b = beta[itime]
-        if (itime<Rt.size-1):
-            b= 0.5*(beta[itime]+beta[itime+1])
-        dsdt =  -b* s * i
-        didt =  b* s * i - gamma * i
-        drdt = gamma * i
-        s += dsdt
-        i += didt
-        r += drdt
-    #inf =np.abs(inf)/np.abs(inf)
-    return inf
 
 
 
