@@ -4,11 +4,15 @@ import sys
 import time
 import numpy as np
 from dateutil import rrule, parser
+import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # To ensure proper importing below
 from helpers import load_config, save_results, visualize_result_summary, visualize_cross_plots, \
-    visualize_cross_plots_plevels
+    visualize_cross_plots_plevels, visualize_crossplot_df
+from plot_tno import plot_df
 from voccore import run_models
+
+
 
 
 def main(args):
@@ -58,6 +62,8 @@ def main(args):
 
     visualize_cross_plots_plevels(h5path,sumfigpath, "infpeak",plevels, plevelcolors, scale=1.0 )
     visualize_cross_plots_plevels(h5path, sumfigpath, "hosppeak", plevels, plevelcolors, scale=1.0)
+    #visualize_crossplot_df(h5path, "hosppeak")
+
 
     print('Total runtime: {:.2f} minutes'.format((time.time() - start_time) / 60.))
 
