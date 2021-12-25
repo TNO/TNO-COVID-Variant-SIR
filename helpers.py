@@ -3,9 +3,10 @@ import json
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 
-
+from plot_tno import plot_df
 
 def load_config(path):
     """
@@ -146,6 +147,27 @@ def visualize_cross_plots(h5path, figpath, skey, scale=1.0):
     plt.tight_layout()
     plt.savefig(figpath, dpi=300)
     plt.close()
+
+def read_df(h5path, skey):
+    parameters, results = load_results(h5path)
+    nr_realizations =  results[skey].size
+    varying_param = [key for key in parameters if np.size(parameters[key]) == nr_realizations]
+    hospeak = results[skey]
+    data = { skey : hospeak}
+    df = pd.DataFrame(data)
+    for i, par in enumerate(varying_param):
+        data = parameters[par]
+        df[par] = data
+    return df
+
+def visualize_crossplot_df(h5path, skey):
+    df = read_df(h5path, skey)
+    parameters, results = load_results(h5path)
+    nr_realizations = results[skey].size
+    varying_param = [key for key in parameters if np.size(parameters[key]) == nr_realizations]
+    for i, par in enumerate(varying_param):
+        plot_df(df, par, skey, percentile_window = 10,percentile_values=(90,70), percentile_fill=(True, True), percentile_colors=("mistyrose","powderblue"),
+                percentile_alpha=0.8)
 
 def visualize_cross_plots_plevels(h5path, figpath, skey, plevels, plevelcolor, scale=1.0):
     parameters, results = load_results(h5path)
