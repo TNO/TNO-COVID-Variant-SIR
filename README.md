@@ -1,6 +1,5 @@
 # TNO-COVID-delta2omicron-SIR
 
-Running
 
 for further information on this code and referencing to this code:
 
