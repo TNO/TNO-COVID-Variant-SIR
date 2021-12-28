@@ -31,8 +31,8 @@ For voc_main.py
   script path: {your git omicron dir} voc_main.py
   parameters: voc_input_omicronNL.json
   working directory {your git omicron dir}
-For voc_plot.py
-  script path: {your git omicron dir} voc_pot.py
+For voc_plot.py (not supported yet)
+  script path: {your git omicron dir} voc_plot.py
   parameters: voc_input_omicronNL.json
   working directory {your git omicron dir}
 
