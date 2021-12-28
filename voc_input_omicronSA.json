@@ -24,6 +24,8 @@
   "startinfperc": ["Uniform",0.2,0.25],
   "startsusceptible":  ["Uniform",0.2,0.3],
     "ts": 4.8,
+  "seir_tlatent": 2,
+  "seir_tinf": 5,
   "ve_trans": 0.4,
   "ve_immune_o": 0.2,
   "ve_immune_hosp_o": 0.7,
