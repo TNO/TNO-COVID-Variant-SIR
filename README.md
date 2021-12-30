@@ -8,7 +8,7 @@ MS ID#: MEDRXIV/2021/268394
 MS TITLE: SIR model for assessing the impact of the advent of Omicron and mitigating measures on infection pressure and hospitalization needs
 
 there is an updated version of the MS at this site (which will be updated soon at MEDRVIX (it repairs errors and extended cases with fit to data)
-[updated manuscipt:] (Predictive Transmission  Model for Omicron_V9.pdf)
+[!flow] Predictive Transmission  Model for Omicron_V9.pdf
 
 
 Jan-Diederik van Wees,  Martijn van der Kuip,Sander Osinga, Bart Keijser, David van Westerloo, Maurice Hanegraaf
