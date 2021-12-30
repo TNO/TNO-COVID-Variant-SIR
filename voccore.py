@@ -31,7 +31,7 @@ def sample_parameter_space(config):
                             've_booster_d', 've_booster_o',
                             've_vac_hosp_d', 've_vac_hosp_o',
                             've_booster_hosp_d', 've_booster_hosp_o',
-                            're0_voc', 'seir_tlatent','seir_tinf']
+                            're0_voc', 'seir_tlatent','seir_tinf','tshift']
     locked_param_names = ['calcmethod', 'startdate', 'enddate',
                           'p_vac_start', 'p_booster_start',
                           'r_lockdowndayx', 'r_lockdown',
@@ -105,7 +105,8 @@ def run_models(config):
                                  re0_voc=p['re0_voc'][a],
                                  calcmethod=p['calcmethod'][a],
                                  seir_tlatent=p['seir_tlatent'][a],
-                                 seir_tinf=p['seir_tinf'][a]
+                                 seir_tinf=p['seir_tinf'][a],
+                                 tshift=p['tshift'][a]
                              )
 
         results.append(out)
@@ -222,7 +223,7 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
                re0_voc=-1,
                calcmethod=1,
                seir_tlatent=2,
-               seir_tinf=3):
+               seir_tinf=5, tshift=14):
     """
          construct Grid instance from fname and format
 
@@ -255,11 +256,13 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
      :param  ve_vac_hosp_d:  Vaccin  efficacy against hospitalization for delta
      :param  ve_vac_hosp_o   Vaccin (and delta infected loosing immunity) efficacy against hospitalization for omicron
      :param  ve_booster_hosp_d:  booster efficacy against hospitalization for delta
-     :param  ve_booster_hosp_o   booster efficacy against hospitalization for omicron   
+     :param  ve_booster_hosp_o   booster efficacy against hospitalization for omicron
      :param  re0_voc:  the ratio of the basic reproduction number of the VOC omicron  to prevailing (delta), if -1 it will estimate it from the vaccination state and k value
      :param  calcmethod:  calculation method 1: SIR, 2 SEIR, for SEIR seir_tlatent is latency time,  ts is infectious time
      :param  seit_tlatent: latency time (in days) for SEIR method (if used)
-     :param  seit_tinf: infecteous time (in days_ for SEIR method (if used) (in order to arrrive at 4.8 days ts: tlatent and tinf van be set to 2 and 3 days)
+     :param  seit_tinf: infecteous time (in days_ for SEIR method (if used) (in order to arrrive at 4.8 days ts: tlatent and tinf van be set to 2 and 5 days)
+     :param  tshift:  shift of reference Rt values reference dates as they start the be felt in registered cases +tshift days
+
 
      """
 
@@ -283,13 +286,13 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
     p = 10**f0_voc
 
-    ft = p * np.exp(k* indx) / (p * np.exp(k * indx) + (1 - p))
+    ft = p * np.exp(k* (indx)) / (p * np.exp(k * (indx)) + (1 - p))
 
 
     demtotal = demn[-1]
 
     # number of boosters
-    dembooster = np.interp(indx, boosterdayx, boosterdayn)
+    dembooster = np.interp(indx-tshift, boosterdayx, boosterdayn)
     dembooster *=vac_ratio
 
     # you cannot booster more than vaccinated
@@ -324,7 +327,10 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
     gamma = 1 / ts
     beta = np.exp(k) - 1 + gamma
     rtratioref = beta / gamma
-    R0o_R0d = rtratioref * Ct_d[0]*Id[0]/(Ct_o[0]*Io[0])
+    if (re0_voc<0):
+        R0o_R0d = rtratioref * Ct_d[0]*Id[0]/(Ct_o[0]*Io[0])
+    else:
+        R0o_R0d = re0_voc
 
 
     Rto=   R0o_R0d* Ct_o * Io
@@ -348,7 +354,7 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
 
     # now correct properly for R(0) and measures for additional lockdown
-    r_lockdown = np.interp(indx, r_lockdowndayx, r_lockdownval)
+    r_lockdown = np.interp(indx-tshift, r_lockdowndayx, r_lockdownval)
     Rt *= r_lockdown/Rt[0]
 
 
