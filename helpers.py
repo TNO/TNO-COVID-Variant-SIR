@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 import h5py
 import matplotlib.pyplot as plt
@@ -64,7 +65,7 @@ def load_results(h5path):
 
 
 def visualize_result_summary(h5path, figpath, plotname, plotcolor, plottitle, x=None, plothistograms=True,
-                             plotscale =1.0, tabulate=False):
+                             plotscale =1.0, tabulate=False, plotdata="", plotshift=0):
     parameters, results = load_results(h5path)
 
     try:
@@ -77,10 +78,13 @@ def visualize_result_summary(h5path, figpath, plotname, plotcolor, plottitle, x=
     nr_realizations = results['infpeak'].size
     varying_param = [key for key in parameters if np.size(parameters[key]) == nr_realizations]
     temp = results[plotname]
-    mean_t = np.mean(temp, axis=0)*plotscale
-    median_t = np.percentile(temp, 50, axis=0)*plotscale
-    p5 = np.percentile(temp, 5, axis=0)*plotscale
-    p95 = np.percentile(temp, 95, axis=0)*plotscale
+    plotscale2 =1.0
+    if (plotscale>=0):
+        plotscale2 =plotscale
+    mean_t = np.mean(temp, axis=0)*plotscale2
+    median_t = np.percentile(temp, 50, axis=0)*plotscale2
+    p5 = np.percentile(temp, 5, axis=0)*plotscale2
+    p95 = np.percentile(temp, 95, axis=0)*plotscale2
 
     fig = plt.figure(figsize=(20, 5), constrained_layout=False)
 
@@ -102,11 +106,22 @@ def visualize_result_summary(h5path, figpath, plotname, plotcolor, plottitle, x=
         plt.ylabel('hospeak')
     """
     ax = fig.add_subplot(outer_grid[1:])
+    x = x + timedelta(days=plotshift)
     ax.plot(x, mean_t, c='k', label='Mean')
     ax.plot(x, median_t, c='k', ls=':', label='P50')
     ax.fill_between(x, p5, p95, facecolor=plotcolor, label='90% conf')
     ax.set_xlabel('Date/days')
     ax.set_ylabel(plottitle)
+    if (plotdata!=""):
+        data = pd.read_csv(plotdata, delimiter='\t')
+        data.day = pd.to_datetime(data.day, format="%d-%m-%Y")
+        x_obs = data.day.values
+        y_obs = data.cases.values*1.0
+        if (plotscale>=0):
+            y_obs/= y_obs[plotshift]
+        plt.scatter(x_obs, y_obs , c='k', label='data', marker='o', s=8)
+
+
     #if plotname == 'Rt':
     #    ax.set_ylim(1, 1.5)
     plt.title(plottitle)
