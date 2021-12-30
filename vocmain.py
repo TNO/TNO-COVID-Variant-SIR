@@ -44,17 +44,18 @@ def main(args):
 
     datesx = list(rrule.rrule(rrule.DAILY, dtstart=parser.parse(config['startdate']), until=parser.parse(config['enddate'])))
     x = np.array(datesx)
-    #names = ['x', 'inf', 'hospsum', 'ft', 'Rt', 'agevac', 'demvac', 'infpeak', 'hospeak']
-    #plotnames = [ 'ft', 'hospsum', 'Rt']
+
     plotnames = config['plot']['plotnames']
     plotcolors= config['plot']['plotcolors']
     plottitles = config['plot']['plottitles']
     plothistograms = config['plot']['plothistograms']
     plotscales = config['plot']['scales']
+    plottimeshift= config['plot']['timeshift']
+    plotdata = config['plot']['data']
 
     for i, plotname in enumerate(plotnames):
         visualize_result_summary(h5path, sumfigpath, plotname, plotcolors[i], plottitles[i], x, plothistograms,plotscales[i],
-                                 tabulate= (plotname=='Rt'))
+                                 tabulate= (plotname=='Rt'),plotdata=plotdata[i], plotshift=plottimeshift[i])
 
     visualize_cross_plots(h5path, crsfigpath, "infpeak")
     plevels = [10, 25, 50]
