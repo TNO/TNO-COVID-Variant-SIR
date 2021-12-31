@@ -2,7 +2,7 @@
   "base_dir": "C:\\Users\\weesjdamv\\PycharmProjects\\omicron",
   "run_name": "voc_runSA",
   "calcmethod": 1,
-  "tshift": 12,
+  "tshift": 14,
   "n_samples": 100,
    "startdate": "2021-11-01",
    "enddate": "2022-01-01",
