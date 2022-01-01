@@ -37,7 +37,7 @@
   "ve_vac_hosp_o": ["Uniform",0.9,0.95],
    "ve_booster_hosp_d": 0.95,
   "ve_booster_hosp_o": ["Uniform",0.95, 0.98],
-    "re0_voc": 1.2,
+    "re0_voc": -1,
   "plot": {
      "plotnames": ["inf", "hosp", "ft", "Rt", "Rtd", "Rtratio", "pu", "pv", "pb"],
      "plottitles": ["infected index (1=start)","daily hospitalized index (1=start)", "VOC prevalence", "Reproduction number", "Rtd", "Rtratio", "pu", "pv", "pb"],
