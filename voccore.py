@@ -3,8 +3,11 @@ import numpy as np
 from datetime import datetime             # for manipulating dates
 import matplotlib.pyplot as plt           # for plotting
 from scipy.stats import norm, uniform, lognorm, triang
+from scipy.ndimage import gaussian_filter1d
+import scipy.special as sps
 from tqdm import tqdm
 import time
+from datetime import  timedelta
 
 from scipy.integrate import odeint
 
@@ -266,9 +269,14 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
      """
 
+
+    iextra_conv = 20
     date1 = startdate
     date2 = enddate
     datesx = list(rrule.rrule(rrule.DAILY, dtstart=parser.parse(date1), until=parser.parse(date2)))
+
+    date2ext = datesx[-1]+ timedelta(days=iextra_conv)
+    datesx = list(rrule.rrule(rrule.DAILY, dtstart=parser.parse(date1), until=date2ext))
 
     x = np.array(datesx)
     indx = np.arange(x.size)
@@ -376,7 +384,27 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
         inf = base_seir_model(sirinit, Rt, k,ts, seir_tlatent, seir_tinf)
 
 
-    #inf = getInfectedFromSeir(sirinit, Rt, ts)
+    hosp = getHosp(inf, ft, demage, demn, agegroups_p_vac, w_hosp_age, p_booster_start, p_vac_start, dp_b,
+            Ud, ve_immune_hosp_o,ve_vac_hosp_d, ve_vac_hosp_o, ve_booster_hosp_d, ve_booster_hosp_o)
+
+
+    # next convolve the time series
+
+    gamma_mean = 7
+    gamma_stdev = 4 # 4
+
+    inf = lognormal_smooth_shift_convolve(inf, gamma_mean, gamma_stdev, scale=1.0, fillval=inf[0])
+    inf = lognormal_smooth_shift_convolve(inf, -gamma_mean, 0, scale=1.0, fillval=inf[0])
+
+    gamma_mean_hosp = gamma_mean
+    gamma_stdev_hosp =gamma_stdev
+
+    hosp = lognormal_smooth_shift_convolve(hosp, gamma_mean_hosp, gamma_stdev_hosp, scale=1.0, fillval=inf[0])
+    hosp = lognormal_smooth_shift_convolve(hosp, -gamma_mean, 0, scale=1.0, fillval=inf[0])
+
+
+    #hosp = getHosp(inf, ft, demage, demn, agegroups_p_vac, w_hosp_age, p_booster_start, p_vac_start, dp_b,
+    #       Ud, ve_immune_hosp_o,ve_vac_hosp_d, ve_vac_hosp_o, ve_booster_hosp_d, ve_booster_hosp_o)
 
     inf = inf / inf[0]
 
@@ -384,13 +412,24 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
     infpeak = getpeaks(inf)
 
-    hosp = getHosp(inf, ft, demage, demn, agegroups_p_vac, w_hosp_age, p_booster_start, p_vac_start, dp_b,
-            Ud, ve_immune_hosp_o,ve_vac_hosp_d, ve_vac_hosp_o, ve_booster_hosp_d, ve_booster_hosp_o)
 
 
 
 
     hosppeak = getpeaks(hosp)
+
+    # trim the results
+    indx = indx[:-iextra_conv]
+    inf = inf[:-iextra_conv]
+    ft = ft[:-iextra_conv]
+    Rt = Rt[:-iextra_conv]
+    r_lockdown = r_lockdown[:-iextra_conv]
+    rtratio_voc =rtratio_voc[:-iextra_conv]
+    pu = pu[:-iextra_conv]
+    pv = pv[:-iextra_conv]
+    pb = pb[:-iextra_conv]
+    hosp = hosp[:-iextra_conv]
+
 
     return indx,inf,  ft, Rt, r_lockdown, rtratio_voc, pu, pv, pb,  infpeak, hosp, hosppeak
 
@@ -403,6 +442,7 @@ def getRt(inf, ts):
     gamma = 1/ts
     beta  = np.exp(kgrowth)-1+ gamma
     Rt = beta/gamma
+    Rt[0]=Rt[1]
     return Rt
 
 def getInterFt (ft, d, o):
@@ -543,8 +583,126 @@ def base_seir_model(seir_init, Rt,  k, ts, tlatent, tinf):
 
     return inf
 
+def pdf_gamma( x ,shape,scale ):
+    if (x<0):
+        return 0
+    else:
+        return (x**(shape-1) *(np.exp(-x/scale)/ (sps.gamma(shape)*scale**shape)))
+
+def pdf_lognormal (x, mu_log, sd_log):
+    if (x>0):
+        r = (1.0/(x*sd_log * np.sqrt(2*np.pi))) *  np.exp(- (np.log(x)- mu_log)**2 / (2*sd_log**2) )
+    else:
+        r= 0
+    return r
+
+def pdf_gamma( x ,shape,scale ):
+    if (x<0):
+        return 0
+    else:
+        return (x**(shape-1) *(np.exp(-x/scale)/ (sps.gamma(shape)*scale**shape)))
 
 
+
+def find_lognormal_musd (mu_target, sd_target):
+    mu = 0
+    sd = 0
+    mu_log = 0
+    sd_log = 0.7
+
+
+    while(abs(sd_target-sd)>1e-1):
+        while (abs(mu_target -mu)>1e-2 ):
+            mu = np.exp(mu_log + sd_log ** 2 / 2)
+            mu_log = mu_log + np.log(mu_target/mu)
+            sd = np.sqrt(np.exp(sd_log ** 2 + 2 * mu_log) * (np.exp(sd_log ** 2) - 1))
+            #print ('mu, sd ', mu,sd)
+        sd_log = sd_log + 0.3* np.log(sd_target /sd)
+        mu = np.exp(mu_log + sd_log ** 2 / 2)
+    return mu_log, sd_log
+
+
+
+def lognormal_smooth_shift_convolve (input_nopad, mean, stddev, scale=1.0,fillval=0):
+    """
+    smooths the input with gaussian smooothing with standarddeviation and shifts its delay positions
+    :param input: The input array
+    :param mean: the amount of indices to shift the result
+    :param the stddev for the gaussian smoothing (in index count)
+    :param scale: scale the input array first with scale
+    :return: the smoothed and shifted array
+    """
+    forcescale = False
+    npad = 30
+    input = np.pad(input_nopad, (npad,npad), 'edge')
+    if isinstance(scale, np.ndarray):
+        forcescale = True
+    if (forcescale or np.abs(scale-1) > 1e-5):
+        input = input*scale
+
+    result = input
+    if (stddev > 0.99) and (mean > 0.99):
+        isd = 8* max(1,int (stddev))
+        isd = min( int(0.5*np.size(input)-1), isd)
+        mu_log, sd_log = find_lognormal_musd(mean, stddev)
+        ishift = int (mean)
+        mylognormal= np.fromiter(( pdf_lognormal(x, mu_log, sd_log) for x in range (-isd+ishift, isd+ishift+1)), np.float)
+        result = np.convolve(input, mylognormal, mode='same')
+
+    if (mean > 0):
+        result = np.roll(result, int(mean))
+        result[: int(mean)] = fillval
+    else:
+        result = np.roll(result, int(mean))
+        # fill the trailing values with the last result
+        result[mean:]=result[mean-1]
+
+    result = result[npad:-npad]
+    return result
+
+def gamma_smooth_shift_convolve (input_nopad, mean, stddev, scale=1.0, fillval=0):
+    """
+    convolves the input with a gamma distribution with mean of shift
+    :param input_nopad: The input array
+    :param mean: the mean (choose integer to be sure that it is shifted the right way
+    :param the stddev for the gaussian smoothing (in index count)
+    :param scale: scale the input array first with scale
+    :param shiftmean: shift the result with the mean
+    :return: the convolved (and shifted) array
+    """
+    forcescale = False
+
+    npad = 30
+    input = np.pad(input_nopad, (npad,npad), 'edge')
+    if isinstance(scale, np.ndarray):
+        forcescale = True
+    if (forcescale or np.abs(scale-1) > 1e-5):
+        input = input*scale
+
+    result = input
+    if (stddev > 0.99) and (mean > 0.99):
+        if (mean<stddev):
+            stddev = mean - 1
+        isd = 8* max(1,int (stddev))
+        isd = min( int(0.5*np.size(input)-1), isd)
+        theta = stddev ** 2 / mean
+        k = mean / theta
+        ishift = int (mean)
+        mygamma= np.fromiter(( pdf_gamma(x, k, theta) for x in range (-isd+ishift, isd+ishift+1)), np.float)
+        scale = np.sum (mygamma)
+        mygamma /= scale
+        result = np.convolve(input, mygamma, mode='same')
+
+    if (mean > 0):
+        result = np.roll(result, int(mean))
+        result[: int(mean)] = fillval
+    else:
+        result = np.roll(result, int(mean))
+        # fill the trailing values with the last result
+        result[mean:]=result[mean-1]
+
+    result = result[npad:-npad]
+    return result
 
 
 
