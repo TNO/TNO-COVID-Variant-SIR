@@ -65,7 +65,7 @@ def load_results(h5path):
 
 
 def visualize_result_summary(h5path, figpath, plotname, plotcolor, plottitle, x=None, plothistograms=True,
-                             plotscale =1.0, tabulate=False, plotdata="", plotshift=0):
+                             plotscale =1.0,  tabulate=False, plotdata="", plotshift=0):
     parameters, results = load_results(h5path)
 
     try:
