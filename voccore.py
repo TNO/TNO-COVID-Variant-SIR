@@ -269,7 +269,6 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
      """
 
-
     iextra_conv = 20
     date1 = startdate
     date2 = enddate
@@ -390,7 +389,7 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
     # next convolve the time series
 
-    gamma_mean = 7
+    gamma_mean = 7 # 7
     gamma_stdev = 4 # 4
 
     inf = lognormal_smooth_shift_convolve(inf, gamma_mean, gamma_stdev, scale=1.0, fillval=inf[0])
@@ -401,6 +400,10 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
 
     hosp = lognormal_smooth_shift_convolve(hosp, gamma_mean_hosp, gamma_stdev_hosp, scale=1.0, fillval=inf[0])
     hosp = lognormal_smooth_shift_convolve(hosp, -gamma_mean, 0, scale=1.0, fillval=inf[0])
+
+
+
+
 
 
     #hosp = getHosp(inf, ft, demage, demn, agegroups_p_vac, w_hosp_age, p_booster_start, p_vac_start, dp_b,
@@ -430,8 +433,26 @@ def single_run (r_lockdowndayx, r_lockdownval, r_lockdownscale,
     pb = pb[:-iextra_conv]
     hosp = hosp[:-iextra_conv]
 
+    #convolve
+    date1ext = datesx[0] - timedelta(days=iextra_conv)
+    datesx2 = list(rrule.rrule(rrule.DAILY, dtstart=date1ext, until=date2ext))
 
-    return indx,inf,  ft, Rt, r_lockdown, rtratio_voc, pu, pv, pb,  infpeak, hosp, hosppeak
+    x2 = np.array(datesx2)
+    indx2= np.arange(x2.size)
+    ftc = p * np.exp(k* (indx2-iextra_conv)) / (p * np.exp(k * (indx2-iextra_conv)) + (1 - p))
+    minftc = 1-ftc
+
+    ftc = lognormal_smooth_shift_convolve(ftc, gamma_mean, gamma_stdev, scale=1.0, fillval=ftc[0])
+    ftc = lognormal_smooth_shift_convolve(ftc, -gamma_mean, 0, scale=1.0, fillval=ftc[0])
+
+    minftc = lognormal_smooth_shift_convolve(minftc, gamma_mean, gamma_stdev, scale=1.0, fillval=ftc[0])
+    minftc = lognormal_smooth_shift_convolve(minftc, -gamma_mean, 0, scale=1.0, fillval=ftc[0])
+
+    ftc = ftc/(ftc+minftc)
+
+    ftc = ftc[iextra_conv:-iextra_conv]
+
+    return indx,inf,  ftc, Rt, r_lockdown, rtratio_voc, pu, pv, pb,  infpeak, hosp, hosppeak
 
 
 
