@@ -9,7 +9,7 @@ MS TITLE: SIR model for assessing the impact of the advent of Omicron and mitiga
 
 there is an updated version of the MS at this site (which will be updated soon at MEDRVIX (it repairs errors and extended cases with fit to data)
 
-https://github.com/TNO/TNO-COVID-Variant-SIR/blob/master/Predictive_Transmission_Model_for_Omicron_V11.pdf
+https://github.com/TNO/TNO-COVID-Variant-SIR/blob/master/Predictive_Transmission_Model_for_Omicron_V12.pdf
 
 
 Jan-Diederik van Wees,  Martijn van der Kuip,Sander Osinga, Bart Keijser, David van Westerloo, Maurice Hanegraaf
